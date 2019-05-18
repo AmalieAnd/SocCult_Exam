@@ -5,9 +5,13 @@ date: "18/5/2019"
 output: html_document
 ---
 
+
+
                               Social and Cultural Dynamics: Analysis of 'Questioning game theory' 
                                                                 +
                                               Assignment 5: Computational Modeling
+ 
+ 
  
 
 ```{r setup + packages}
