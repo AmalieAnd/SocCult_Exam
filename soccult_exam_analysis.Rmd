@@ -1,0 +1,402 @@
+---
+title: "SocCult_Analysis_Questioning game theory"
+author: "Amalie Lysgaard Andersen"
+date: "18/5/2019"
+output: html_document
+---
+
+                              Social and Cultural Dynamics: Analysis of 'Questioning game theory' 
+                                                                +
+                                              Assignment 5: Computational Modeling
+ 
+
+```{r setup + packages}
+setwd("~/Library/Mobile Documents/com~apple~CloudDocs/4. Aarhus Universitet/4. Semester/2. Social and cultural dynamics/SocCult_Exam")
+
+pacman::p_load("devtools", "rstan", "rethinking", "dplyr", "brms", "tidyverse", "bayesplot", "RColorBrewer", "cowplot", "ggeffects") 
+```
+
+```{r data} 
+df <- read.csv("soccult_data_updated.csv")
+tom <- read.csv("tom_trials.csv") 
+```
+
+```{r no NAs df}
+#data w/o na's  
+new <- df %>%
+  select(ID, age, gender, condition, set_solo, perf_solo, perf_pair, perf_diff, competence, amount, steps, payoff, payoff_partner, payoff_diff, win, tom)
+
+```
+
+
+                                                   ### 1. initial look at data ###
+  
+Participants
+```{r Participants info}
+mean(df$age)
+sum(df$gender == "F")
+```
+
+Plots
+```{r simple: playing around w plots}
+
+ggplot(df) + 
+  aes(steps, competence) +
+  geom_count(aes(color = tom))
+
+ggplot(df) +
+  aes(steps, competence) +
+  geom_tile(aes(fill = tom))
+
+ggplot(df) +
+  aes(steps, tom) +
+  geom_tile(aes(fill = competence)) 
+
+ggplot(df) +
+  aes(competence, tom) +
+  geom_tile(aes(fill = steps))
+
+#grid
+ggplot(df) +
+  aes(steps, tom) + 
+  geom_point() +
+  facet_wrap(~competence)
+
+#simple
+one <- ggplot(df) +
+  aes(tom, steps) + 
+  geom_point() 
+two <- ggplot(df) +
+  aes(competence, steps) + 
+  geom_point() 
+
+plot_grid(one, two)
+```
+
+```{r simple initial plots}
+ggplot(df2, aes(steps)) +
+  geom_histogram(binwidth = 0.7) #+
+  #scale_x_continuous(breaks = seq(0, 100, 5))
+
+
+ggplot(df2, aes(condition, payoff)) + 
+  geom_point(aes(colour = condition)) 
+
+ggplot(df, aes(ID, tom)) + 
+  geom_point()
+
+ggplot(df, aes(condition, tom)) + 
+  geom_point(aes(colour = condition)) 
+
+ggplot(df, aes(payoff, tom)) + 
+  geom_point(aes(colour = condition)) 
+
+ggplot(df, aes(condition, win)) +
+  geom_histogram()
+
+ggplot(df, aes(steps, condition)) +
+  geom_point()
+
+
+# with models
+plot(df$steps ~ df$condition) 
+plot(df$steps ~ df$tom) 
+plot(df$steps ~ df$competence) 
+# ^GRINEREN --> jo lavere comp jo flere steps
+
+
+# density plots
+dens (df$steps) 
+dens (df$competence)
+
+hist(df$steps) 
+```
+
+```{r spaghettiplot of tom}
+display.brewer.all() 
+
+xlab <- "Trial" 
+ylab <- "Measure of Theory of Mind"
+num <- 22
+getPalette <- colorRampPalette(brewer.pal(8,"Accent"))
+
+ggplot(tom, aes(trial, tom)) +
+  geom_point(aes(colour = ID), size = 2) +
+  scale_color_manual(values = getPalette(num)) +
+  geom_line(aes(colour = ID), size = 0.5) +
+  labs(x = xlab, y = ylab) +
+  scale_y_continuous(breaks = c(-10:20)) +
+  scale_x_continuous(breaks = c(1:3)) +
+  theme_minimal() +
+  labs(title = "Performance across trials in Matching Pennies game")
+```
+
+```{r density, raw data on condition}
+palpal <- colorRampPalette(brewer.pal(9,"Spectral"))
+numb <- 2
+xlab2 <- "Steps from $100" 
+ylab2 <- "Density"
+
+ggplot(df, aes(steps)) + 
+  geom_density(aes(fill = condition, colour = condition), alpha = 0.3) + 
+  facet_wrap(~condition) +
+  scale_color_manual(values = palpal(numb)) +
+  scale_fill_manual(values = palpal(numb)) +
+  theme_minimal() +
+  labs(x = xlab2, y = ylab2, title = "Distribution of steps across conditions") 
+```
+
+ 
+ 
+                                                    ### 2. Priors + modelling ###
+
+#Creating models
+
+m0.0  NOTHING 
+```{r}
+get_prior(steps ~ 1, data = df, family = gaussian())
+
+m0.0 <- brm(
+  steps ~ 1 , 
+  prior = c(set_prior("normal(20, 5)", class = "Intercept"), 
+            set_prior("normal(0, 10)", class = "sigma")),
+  data = df
+)
+
+#calling results
+m0.0
+#checking divergents
+pairs(m0.0, np = nuts_params(model0.0))
+#plot
+plot(m0.0)
+#ppcheck
+pp_check(m0.0, nsamples = 50) 
+```
+
+m0    condition
+```{r brm: model0} 
+get_prior(steps ~ 1 + condition, data = df, family = gaussian())
+  
+m0 <- brm( 
+  steps ~ 1 + condition, 
+  prior = c(set_prior("normal(20, 5)", class = "Intercept"), 
+            set_prior("normal(0, 10)", class = "b"),  
+            set_prior("normal(0, 10)", class = "sigma")),
+  data = df,
+  sample_prior = "only"
+)
+
+# sample_prior: Indicate if samples from all specified proper priors should be drawn additionally to the posterior samples (defaults to "no"). Among others, these samples can be used to calculate Bayes factors for point hypotheses via hypothesis. If set to "only", samples are drawn solely from the priors ignoring the likelihood, which allows among others to generate samples from the prior predictive distribution. In this case, all parameters must have proper priors.
+
+#calling results
+m0
+#checking divergents
+pairs(m0, np = nuts_params(model0))
+#plot
+plot(m0)
+#ppcheck
+pp_check(m0, nsample = 50)  #color_scheme_set("red")
+```
+
+m1.3  tom + competence
+```{r}
+get_prior(steps ~ 1 + tom + competence, data = df, family = gaussian()) 
+   
+m1.3 <- brm(
+  steps ~ 1 + tom + competence,  
+  prior = c(set_prior("normal(20, 5)", class = "Intercept"), 
+            set_prior("normal(0, 10)", class = "b"), 
+            set_prior("normal(0, 10)", class = "sigma")),
+  data = df
+) 
+
+#calling results
+m1.3 
+#checking divergents
+pairs(m1.3, np = nuts_params(m1.3))
+#plot
+plot(m1.3)
+#ppcheck
+pp_check(m1.3, nsamples = 50)
+```
+
+m3.1  condition * tom + competence
+```{r} 
+# Getting the priors  
+get_prior(steps ~ 1 + condition * tom + competence, df, family = gaussian) 
+  
+m3.1 <- brm(  
+  steps ~ 1 + condition * tom + competence, 
+  prior = c(set_prior("normal(20, 5)", class = "Intercept"), 
+            set_prior("normal(0, 10)", class = "b"), 
+            set_prior("normal(0, 10)", class = "sigma")),
+  data = df
+)
+
+#calling results
+m3.1
+#checking divergents
+pairs(m3.1, np = nuts_params(m3.1))
+#plot
+plot(m3.1)
+#ppcheck
+pp_check(m3.1, nsamples = 50)
+```
+
+M4.1  condition + tom + competence
+```{r}  
+# Getting the priors  
+get_prior(steps ~ 1 + condition + tom + competence, df, family = gaussian)
+  
+m4.1 <- brm(
+  steps ~ 1 + condition + tom + competence, 
+  prior = c(set_prior("normal(20, 5)", class = "Intercept"), 
+            set_prior("normal(0, 10)", class = "b"), 
+            set_prior("normal(0, 10)", class = "sigma")),
+  data = df
+)
+
+#calling results
+m4.1
+#checking divergents
+pairs(m4.1, np = nuts_params(m4.1))
+#plot
+plot(m4.1)
+#ppcheck
+pp_check(m4.1, nsamples = 50)
+```
+
+                                            
+                                            
+                                            ### 3. MODEL COMPARISON (WAIC) ###
+
+```{r adding waic criterion for all models}
+m0 <- add_criterion(m0, "waic") 
+m0.0 <- add_criterion(m0.0, "waic")
+m1.3 <- add_criterion(m1.3, "waic")
+m3.1 <- add_criterion(m3.1, "waic")
+m4.1 <- add_criterion(m4.1, "waic")
+```
+
+WAIC: m0 + m0.0 + m1.3
+```{r m0 + m0.0 + m1.3}
+# compare the WAIC estimates
+w1 <- loo_compare(m0, m0.0, m1.3, criterion = "waic")
+print(w1, simplify = F)
+
+#Calculating weights
+model_weights(m0, m0.0, m1.3, weights = "waic") %>% 
+  round(digits = 2)
+```
+
+WAIC ALL
+```{r WAIC alround tester}
+#all waic  
+wall <- loo_compare(m1.3, m3.1, m4.1, m0, m0.0, criterion = "waic")
+print(wall, round = 2) 
+```
+
+
+
+
+
+                                                 ### 4. Final plots
+
+
+# Different plots
+
+```{r marginal effects all plots}
+brms::marginal_effects(m3.1) 
+brms::marginal_effects(m4.1)
+brms::marginal_effects(m1.3)
+brms::marginal_effects(m0)
+#brms::marginal_effects(m0.0)
+```
+
+```{r plots of m1.3}
+### pred vs actual
+#creating predictions from model
+pred <- predict(m1.3) 
+pred <- as.data.frame(pred)
+pred$actual <- df$steps
+pred$condition <- df$condition
+
+#plot
+ggplot(pred, aes(actual, Estimate)) +
+  geom_smooth(color = "#449999", method = "lm", se = F) +
+  geom_point(color = "Dark red") +
+  geom_abline(xintercept = 100, yintercept = 100, linetype = "dashed") +
+  xlim(0, 100) +
+  ylim(0, 100) +
+  theme_minimal() +
+  labs(title = "Observation vs. Prediction - Model 3", x = "Observed values (steps)", y = "Model predictions (steps)")
+
+### just simple marginal
+this <- brms::marginal_effects(m1.3)
+plot(this, plot = F)[[2]] +
+  scale_color_brewer(type = "div") +
+  #scale_fill_brewer(type = "qual", palette = "Set1") +
+  #labs(title = "Marginal effects of ToM & steps", x = "ToM", y = "Steps from $100") +
+  theme_minimal()
+
+```
+
+```{r plots of m3.1}
+#creating predictions from model
+pred2 <- predict(m3.1) 
+pred2 <- as.data.frame(pred2)
+pred2$actual <- df$steps
+pred2$condition <- df$condition
+
+#as factor
+#pred$diagnosis <- as.factor(pred$diagnosis)
+
+#plots
+ggplot(pred2) +
+  aes(condition, Estimate) +
+  geom_violin()
+
+plot1 <- ggplot(pred2) +
+  aes(condition, Estimate) +
+  geom_boxplot() 
+plot2 <- ggplot(pred2) +
+  aes(condition, actual) +
+  geom_boxplot()  
+
+plot_grid(plot1, plot2)
+
+# marginal, m3.1
+that <- brms::marginal_effects(m3.1)
+plot(that, plot = F)[[4]] +
+  scale_color_brewer(type = "qual", palette = "Set1") +
+  scale_fill_brewer(type = "qual", palette = "Set1") +
+  labs(title = "Marginal effects of ToM & condition", x = "ToM", y = "Steps from $100") +
+  theme_minimal()
+
+```
+
+```{r competence + steps faceted by condition}
+ggplot(df, aes(tom, steps, color = condition)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  labs(title = "Steps by tom")
+
+num2 <- 2
+getPalette <- colorRampPalette(brewer.pal(2,"Set1"))
+
+ggplot(df, aes(condition, steps, color = condition)) +
+  geom_point() +
+  scale_color_manual(values = getPalette(num2)) +
+  geom_smooth(method = "lm") +
+  labs(title = "Steps by condition")
+
+
+ggplot(df, aes(competence, steps, color = condition)) +
+  geom_point() + 
+  geom_smooth(method = "lm") +
+  labs(title = "Steps by competence")
+```
+
+
+
+
